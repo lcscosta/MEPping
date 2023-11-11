@@ -37,9 +37,9 @@ class MEP(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = "MEP"  # TODO: make this more human readable by adding spaces
-        self.parent.categories = ["Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
+        self.parent.categories = ["NeuroMapping"]  # TODO: set categories (folders where the module shows up in the module selector)
         self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-        self.parent.contributors = ["John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
+        self.parent.contributors = ["Lucas Betioli (USP); Lucas da Costa (USP)"]  # TODO: replace with "Firstname Lastname (Organization)"
         # TODO: update with short description of the module and a link to online module documentation
         self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
@@ -177,10 +177,6 @@ class MEPWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Buttons
         self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
-
-        # Search Buttons
-        #self.ui.mepQButton.connect('clicked(bool)', self.onSearchButton)
-        #self.ui.pathQButton.connect('clicked(bool)', self.onSearchButton)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -387,16 +383,13 @@ class MEPLogic(ScriptedLoadableModuleLogic):
 
             return p[0], p[1], p[2], None, None, None
 
-        # Read a probe surface
-        #stl_reader = vtk.vtkSTLReader()
-        #stl_reader.SetFileName(r"C:\Users\Lucas biomag\Downloads\T1.stl")
-        #stl_reader = vtk.vtkOBJImporter()
-        #stl_reader.SetFileName('peel_brain.obj')
-        #stl_reader.SetFileNameMTL('peel_brain.mtl')
-        #stl_reader.SetFileName('peel_brain.stl')
-        #stl_reader.Update()
+        inputNode = inputVolume.GetStorageNode()
 
-        surface = inputVolume.GetPolyData()
+        stl_reader = vtk.vtkSTLReader()
+        stl_reader.SetFileName(inputNode.GetFileName())
+        stl_reader.Update()
+        #surface = inputVolume.GetPolyData()
+        surface = stl_reader.GetOutput()
         bounds = np.array(surface.GetBounds())
 
         text_data = mepModel.GetText()
@@ -404,9 +397,6 @@ class MEPLogic(ScriptedLoadableModuleLogic):
         with open(temp_file_path, 'w') as temp_file:
             temp_file.write(text_data)
 
-        #file_like_object = StringIO(text_data)
-
-        #data_filename=r"C:\Users\Lucas biomag\Documents\JoonasJoonas-MEP_raw.txt"
         points_reader = vtk.vtkDelimitedTextReader()
         points_reader.SetFileName(temp_file_path)
         points_reader.DetectNumericColumnsOn()
@@ -418,7 +408,7 @@ class MEPLogic(ScriptedLoadableModuleLogic):
         # create the vtkTable object
         tab = vtk.vtkTable()
         table_points = vtk.vtkTableToPolyData()
-        table_points.SetInputData(tab)
+        table_points.SetInputConnection(points_reader.GetOutputPort())
         table_points.SetXColumnIndex(0)
         table_points.SetYColumnIndex(1)
         table_points.SetZColumnIndex(2)
@@ -512,21 +502,28 @@ class MEPLogic(ScriptedLoadableModuleLogic):
         #renWin.SetSize(2048, 1080)
         #iren = vtk.vtkRenderWindowInteractor()
         #iren.SetRenderWindow(renWin)
-
         #renderer.AddActor(actor)
         #renderer.AddActor(point_actor)
         #renderer.AddActor(colorBarActor)
-
         #cam = renderer.GetActiveCamera()
         #renderer.ResetCamera()
         #print(cam.SetPosition((181.50680842279354, 97.51127257102047+200, 864.2770996170809)))
         #cam.Zoom(6)
         #iren.Initialize()
-
         #renWin.Render()
         #iren.Start()
 
-        print('aaaa')
+        inputVolume.SetDisplayVisibility(False)
+        slicer.util.resetThreeDViews()
+        
+        view = slicer.app.layoutManager().threeDWidget(0).threeDView()
+        renderWindow = view.renderWindow()
+        renderers = renderWindow.GetRenderers()
+        renderer = renderers.GetItemAsObject(0)
+        renderer.AddActor(actor)
+        renderer.AddActor(point_actor)
+        renderer.AddActor(colorBarActor)
+        slicer.util.forceRenderAllViews()
 
         stopTime = time.time()
         logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
