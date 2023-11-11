@@ -62,18 +62,7 @@ icp = False
 gaussian_sharpness = 3
 gaussian_radius = 4
 
-# path = 'D:\\Programas\\Google Drive\\Lab\\Doutorado\\projetos\\mTMS\\experiment #2 motor mapping\\mapping\\'
-# subject = "Tuomas"
-# if subject == "Tuomas":
-#     offset_z = 4
-# elif subject == "Victor":
-#     offset_z = 7
-# timestamp = time.localtime(time.time())
-# stamp_date = '{:0>4d}{:0>2d}{:0>2d}'.format(timestamp.tm_year, timestamp.tm_mon, timestamp.tm_mday)
-# stamp_time = '{:0>2d}{:0>2d}{:0>2d}'.format(timestamp.tm_hour, timestamp.tm_min, timestamp.tm_sec)
-# sep = '-'
-# parts = [subject, stamp_date, stamp_time]
-# data_filename = path + subject + sep.join(parts) + '.txt'
+
 
 
 def ICP(coord, surface):
@@ -125,66 +114,7 @@ stl_reader.Update()
 surface = stl_reader.GetOutput()
 bounds = np.array(surface.GetBounds())
 
-# coords = []
-# mep = []
-# mep_average = []
-# import pandas as pd
-# import numpy as np
-#
-# data=pd.read_csv(r"C:\Users\Lucas biomag\Documents\JoonasJoonas-MEP_raw.txt", sep=" ", header=None)
 
-
-# targets = ["target_0", "target_1", "target_-1"]
-# for target in targets:
-#     filename = path + subject + "\\"+target+".mkss"
-#     mat_path = path+subject+"\\"+target+"\\"
-#     with open(filename, 'r') as file:
-#         magick_line = file.readline()
-#         assert magick_line.startswith("##INVESALIUS3_MARKER_FILE_")
-#         ver = int(magick_line.split('_')[-1])
-#         file.readline()
-#         # Read the data lines and create markers
-#         for line in file.readlines():
-#             if line.split('\t')[16] == "True":
-#                 #for i in range(5):
-#                 coord = [float(x) for x in line.split('\t')[:3]]
-#                 coord_flip = coord.copy()
-#                 coord_flip[1] = -coord_flip[1]-offset_y
-#                 coord_flip[2] = coord_flip[2]+offset_z
-#                 if icp:
-#                     coord_icp = list(ICP(coord_flip, surface))
-#                     coords.append(coord_icp[:3])
-#                 else:
-#                     coords.append(coord_flip[:3])
-#             #mep.append(float(line.split('\t')[2]))
-#     coords_np = np.array(coords)
-#     coord_flip = coords_np.copy()
-#
-#     for i in range(1, 10):
-#         file = "mepResults"+str(i)+".mat"
-#         mat = scipy.io.loadmat(mat_path+file)
-#         mep_ = np.max(np.abs(mat["meps"]["allEpochs"][0][0]), axis=1)
-#         mep.append(mep_)
-#         try:
-#             mep_average.append(np.average(mep_, weights=mep_>50))
-#         except ZeroDivisionError:
-#             mep_average.append(np.average(mep_))
-#   # skip the header line
-
-
-
-#
-# mep = np.hstack(mep)
-# mep_average = np.hstack(mep_average)
-# mep_average_norm = (mep_average - mep_average.min())/ (mep_average.max() - mep_average.min())
-#
-# with open(data_filename, 'w', newline='') as file:
-#     file.writelines(["X\tY\tZ\tMEP\n"])
-#     for i, marker in enumerate(coord_flip):
-#         file.writelines('%s\t' % float(x) for x in marker)
-#         file.writelines('%s' % float(mep_average_norm[i]))
-#         file.writelines('\n')
-#     file.close()
 data_filename=r"C:\Users\Lucas biomag\Documents\JoonasJoonas-MEP_raw.txt"
 points_reader = vtk.vtkDelimitedTextReader()
 points_reader.SetFileName(data_filename)
