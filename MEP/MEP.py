@@ -415,11 +415,8 @@ class MEPLogic(ScriptedLoadableModuleLogic):
         table_points.Update()
 
         points = table_points.GetOutput()
-
-        print(points)
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
         points.GetPointData().SetActiveScalars('MEP')
-        print(points.GetPointData())
         range_up = points.GetPointData().GetScalars().GetRange()[1]
         rang = (threshold_down, range_up)
 
@@ -491,27 +488,6 @@ class MEPLogic(ScriptedLoadableModuleLogic):
         titleFormat = vtk.vtkTextProperty()
         titleFormat.SetVerticalJustificationToTop()
         colorBarActor.SetVisibility(1)
-
-
-        def OnPressLeftButton(evt, obj):
-            print(actor.GetOrientation())
-
-        #renderer = vtk.vtkRenderer()
-        #renWin = vtk.vtkRenderWindow()
-        #renWin.AddRenderer(renderer)
-        #renWin.SetSize(2048, 1080)
-        #iren = vtk.vtkRenderWindowInteractor()
-        #iren.SetRenderWindow(renWin)
-        #renderer.AddActor(actor)
-        #renderer.AddActor(point_actor)
-        #renderer.AddActor(colorBarActor)
-        #cam = renderer.GetActiveCamera()
-        #renderer.ResetCamera()
-        #print(cam.SetPosition((181.50680842279354, 97.51127257102047+200, 864.2770996170809)))
-        #cam.Zoom(6)
-        #iren.Initialize()
-        #renWin.Render()
-        #iren.Start()
 
         inputVolume.SetDisplayVisibility(False)
         slicer.util.resetThreeDViews()
