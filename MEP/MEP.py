@@ -1,8 +1,18 @@
+from io import StringIO
 import logging
 import os
 from typing import Annotated, Optional
 
+import numpy as np
+
+
 import vtk
+from vtkmodules.vtkCommonDataModel import (
+    vtkIterativeClosestPointTransform,
+    vtkPolyData,
+)
+from vtkmodules.vtkFiltersGeneral import vtkTransformPolyDataFilter
+
 
 import slicer
 from slicer.ScriptedLoadableModule import *
@@ -271,14 +281,7 @@ class MEPWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             # Compute output
             self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-                               self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-            # Compute inverted output (if needed)
-            if self.ui.invertedOutputSelector.currentNode():
-                # If additional output volume is selected then result with inverted threshold is written there
-                self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-                                   self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
-
+                               self.ui.mepSelector.currentNode())
 
 #
 # MEPLogic
@@ -304,10 +307,9 @@ class MEPLogic(ScriptedLoadableModuleLogic):
         return MEPParameterNode(super().getParameterNode())
 
     def process(self,
-                inputVolume: vtkMRMLScalarVolumeNode,
-                outputVolume: vtkMRMLScalarVolumeNode,
-                imageThreshold: float,
-                invert: bool = False,
+                inputVolume: vtkMRMLModelNode,
+                outputVolume: vtkMRMLModelNode,
+                mepModel: vtkMRMLTextNode,
                 showResult: bool = True) -> None:
         """
         Run the processing algorithm.
@@ -319,13 +321,14 @@ class MEPLogic(ScriptedLoadableModuleLogic):
         :param showResult: show output volume in slice viewers
         """
 
-        if not inputVolume or not outputVolume:
+        if not inputVolume or not outputVolume or not mepModel:
             raise ValueError("Input or output volume is invalid")
 
         import time
         startTime = time.time()
         logging.info('Processing started')
 
+        '''
         # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
         cliParams = {
             'InputVolume': inputVolume.GetID(),
@@ -336,6 +339,194 @@ class MEPLogic(ScriptedLoadableModuleLogic):
         cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
         # We don't need the CLI module node anymore, remove it to not clutter the scene with it
         slicer.mrmlScene.RemoveNode(cliNode)
+        '''
+
+        threshold_down = 0
+
+        dims_size = 1001
+
+        icp = False
+
+        gaussian_sharpness = 3
+        gaussian_radius = 4
+
+        def ICP(coord, surface):
+            """
+            Apply ICP transforms to fit the points to the surface
+            Args:
+                coord: raw coordinates to apply ICP
+            """
+            sourcePoints = np.array(coord[:3])
+            sourcePoints_vtk = vtkPoints()
+            for i in range(len(sourcePoints)):
+                id0 = sourcePoints_vtk.InsertNextPoint(sourcePoints)
+            source = vtkPolyData()
+            source.SetPoints(sourcePoints_vtk)
+
+            source_points = source
+
+            icp = vtkIterativeClosestPointTransform()
+            icp.SetSource(source_points)
+            icp.SetTarget(surface)
+
+            icp.GetLandmarkTransform().SetModeToRigidBody()
+            # icp.GetLandmarkTransform().SetModeToAffine()
+            icp.DebugOn()
+            icp.SetMaximumNumberOfIterations(100)
+            icp.Modified()
+            icp.Update()
+
+            icpTransformFilter = vtkTransformPolyDataFilter()
+            icpTransformFilter.SetInputData(source_points)
+            icpTransformFilter.SetTransform(icp)
+            icpTransformFilter.Update()
+
+            transformedSource = icpTransformFilter.GetOutput()
+            p = [0, 0, 0]
+            transformedSource.GetPoint(0, p)
+
+            return p[0], p[1], p[2], None, None, None
+
+        # Read a probe surface
+        #stl_reader = vtk.vtkSTLReader()
+        #stl_reader.SetFileName(r"C:\Users\Lucas biomag\Downloads\T1.stl")
+        #stl_reader = vtk.vtkOBJImporter()
+        #stl_reader.SetFileName('peel_brain.obj')
+        #stl_reader.SetFileNameMTL('peel_brain.mtl')
+        #stl_reader.SetFileName('peel_brain.stl')
+        #stl_reader.Update()
+
+        surface = inputVolume.GetPolyData()
+        bounds = np.array(surface.GetBounds())
+
+        text_data = mepModel.GetText()
+        temp_file_path = 'temp_data.txt'
+        with open(temp_file_path, 'w') as temp_file:
+            temp_file.write(text_data)
+
+        #file_like_object = StringIO(text_data)
+
+        #data_filename=r"C:\Users\Lucas biomag\Documents\JoonasJoonas-MEP_raw.txt"
+        points_reader = vtk.vtkDelimitedTextReader()
+        points_reader.SetFileName(temp_file_path)
+        points_reader.DetectNumericColumnsOn()
+        points_reader.SetFieldDelimiterCharacters('\t')
+        points_reader.SetHaveHeaders(True)
+
+        print(points_reader)
+
+        # create the vtkTable object
+        tab = vtk.vtkTable()
+        table_points = vtk.vtkTableToPolyData()
+        table_points.SetInputData(tab)
+        table_points.SetXColumnIndex(0)
+        table_points.SetYColumnIndex(1)
+        table_points.SetZColumnIndex(2)
+        table_points.Update()
+
+        points = table_points.GetOutput()
+
+        print(points)
+
+        points.GetPointData().SetActiveScalars('MEP')
+        print(points.GetPointData())
+        range_up = points.GetPointData().GetScalars().GetRange()[1]
+        rang = (threshold_down, range_up)
+
+        dims = np.array([dims_size, dims_size, dims_size])
+        box = vtk.vtkImageData()
+        box.SetDimensions(dims)
+        box.SetSpacing((bounds[1::2] - bounds[:-1:2])/(dims - 1))
+        box.SetOrigin(bounds[::2])
+
+        # Gaussian kernel
+        gaussian_kernel = vtk.vtkGaussianKernel()
+        gaussian_kernel.SetSharpness(gaussian_sharpness)
+        gaussian_kernel.SetRadius(gaussian_radius)
+
+        interpolator = vtk.vtkPointInterpolator()
+        interpolator.SetInputData(box)
+        interpolator.SetSourceData(points)
+        interpolator.SetKernel(gaussian_kernel)
+
+        resample = vtk.vtkResampleWithDataSet()
+        resample.SetInputData(surface)
+        resample.SetSourceConnection(interpolator.GetOutputPort())
+
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputConnection(resample.GetOutputPort())
+        mapper.SetScalarRange(rang)
+
+        lut = vtk.vtkLookupTable()
+        lut.SetTableRange(threshold_down, range_up)
+        colorSeries = vtk.vtkColorSeries()
+        seriesEnum = colorSeries.BREWER_SEQUENTIAL_YELLOW_ORANGE_BROWN_9
+        colorSeries.SetColorScheme(seriesEnum)
+        colorSeries.BuildLookupTable(lut, colorSeries.ORDINAL)
+        lut_map = vtk.vtkLookupTable()
+        lut_map.DeepCopy(lut)
+        lut_map.Build()
+        mapper.SetLookupTable(lut_map)
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        point_mapper = vtk.vtkPointGaussianMapper()
+        point_mapper.SetInputData(points)
+        point_mapper.SetScalarRange(rang)
+        point_mapper.SetScaleFactor(0.75)
+        point_mapper.EmissiveOff()
+        point_mapper.SetSplatShaderCode(
+            "//VTK::Color::Impl\n"
+            "float dist = dot(offsetVCVSOutput.xy,offsetVCVSOutput.xy);\n"
+            "if (dist > 1.0) {\n"
+            "  discard;\n"
+            "} else {\n"
+            "  float scale = (1.0 - dist);\n"
+            "  ambientColor *= scale;\n"
+            "  diffuseColor *= scale;\n"
+            "}\n"
+        )
+
+        point_mapper.SetLookupTable(lut)
+        point_actor = vtk.vtkActor()
+        point_actor.SetMapper(point_mapper)
+
+        actor.SetOrientation((-12, 41, 66))
+        point_actor.SetOrientation((-12, 41, 66))
+
+        colorBarActor = vtk.vtkScalarBarActor()
+        colorBarActor.SetLookupTable(lut)
+        labelFormat = vtk.vtkTextProperty()
+
+        colorBarActor.SetTitle("MEP amplitude µV\n")
+        titleFormat = vtk.vtkTextProperty()
+        titleFormat.SetVerticalJustificationToTop()
+        colorBarActor.SetVisibility(1)
+
+
+        def OnPressLeftButton(evt, obj):
+            print(actor.GetOrientation())
+
+        #renderer = vtk.vtkRenderer()
+        #renWin = vtk.vtkRenderWindow()
+        #renWin.AddRenderer(renderer)
+        #renWin.SetSize(2048, 1080)
+        #iren = vtk.vtkRenderWindowInteractor()
+        #iren.SetRenderWindow(renWin)
+
+        #renderer.AddActor(actor)
+        #renderer.AddActor(point_actor)
+        #renderer.AddActor(colorBarActor)
+
+        #cam = renderer.GetActiveCamera()
+        #renderer.ResetCamera()
+        #print(cam.SetPosition((181.50680842279354, 97.51127257102047+200, 864.2770996170809)))
+        #cam.Zoom(6)
+        #iren.Initialize()
+
+        #renWin.Render()
+        #iren.Start()
+
+        print('aaaa')
 
         stopTime = time.time()
         logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
