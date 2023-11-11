@@ -12,7 +12,7 @@ from slicer.parameterNodeWrapper import (
     WithinRange,
 )
 
-from slicer import vtkMRMLScalarVolumeNode
+from slicer import vtkMRMLScalarVolumeNode, vtkMRMLModelNode, vtkMRMLTextNode
 
 
 #
@@ -110,8 +110,10 @@ class MEPParameterNode:
     thresholdedVolume - The output volume that will contain the thresholded volume.
     invertedVolume - The output volume that will contain the inverted thresholded volume.
     """
+    inputModel: vtkMRMLModelNode
+    inputMEP: vtkMRMLTextNode
     inputVolume: vtkMRMLScalarVolumeNode
-    imageThreshold: Annotated[float, WithinRange(-100, 500)] = 100
+    outputVolume: vtkMRMLScalarVolumeNode 
     invertThreshold: bool = False
     thresholdedVolume: vtkMRMLScalarVolumeNode
     invertedVolume: vtkMRMLScalarVolumeNode
@@ -166,8 +168,16 @@ class MEPWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Buttons
         self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
 
+        # Search Buttons
+        #self.ui.mepQButton.connect('clicked(bool)', self.onSearchButton)
+        #self.ui.pathQButton.connect('clicked(bool)', self.onSearchButton)
+
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+        # Set View
+        layoutManager = slicer.app.layoutManager()
+        layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutOneUp3DView)
 
     def cleanup(self) -> None:
         """
@@ -217,10 +227,16 @@ class MEPWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.setParameterNode(self.logic.getParameterNode())
 
         # Select default input nodes if nothing is selected yet to save a few clicks for the user
-        if not self._parameterNode.inputVolume:
-            firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-            if firstVolumeNode:
-                self._parameterNode.inputVolume = firstVolumeNode
+        if not self._parameterNode.inputModel:
+            firstModelNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLModelNode")
+            if firstModelNode:
+                self._parameterNode.inputModel = firstModelNode
+
+        # Select default input nodes if nothing is selected yet to save a few clicks for the user
+        if not self._parameterNode.inputMEP:
+            firstTextNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLTextNode")
+            if firstTextNode:
+                self._parameterNode.inputMEP = firstTextNode
 
     def setParameterNode(self, inputParameterNode: Optional[MEPParameterNode]) -> None:
         """
@@ -240,7 +256,7 @@ class MEPWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self._checkCanApply()
 
     def _checkCanApply(self, caller=None, event=None) -> None:
-        if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.thresholdedVolume:
+        if self._parameterNode and self._parameterNode.inputModel and self._parameterNode.inputMEP and self._parameterNode.outputVolume:
             self.ui.applyButton.toolTip = "Compute output volume"
             self.ui.applyButton.enabled = True
         else:
